@@ -7,3 +7,10 @@
     "rss-parser": "^3.13.0"
   }
 }
+{
+  "dependencies": {
+    "rss-parser": "^3.13.0",
+    "node-summary": "^1.2.0",
+    "openai": "^4.0.0"
+  }
+}
