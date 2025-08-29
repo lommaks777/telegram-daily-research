@@ -12,3 +12,8 @@
 ## Локальный запуск
 npm i
 node index.mjs
+
+## Переменные окружения
+- TG_BOT_TOKEN — токен Telegram-бота
+- TG_CHAT_ID — -100… id канала или @username
+- OPENAI_API_KEY — ключ OpenAI (для GPT-резюме и «Что протестировать у нас»)
