@@ -1,16 +1,13 @@
 {
   "name": "telegram-daily-research",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "private": true,
   "dependencies": {
-    "rss-parser": "^3.13.0"
-  }
-}
-{
-  "dependencies": {
     "rss-parser": "^3.13.0",
-    "node-summary": "^1.2.0",
-    "openai": "^4.0.0"
+    "openai": "^4.0.0",
+    "jsdom": "^24.0.0",
+    "@mozilla/readability": "^0.5.0",
+    "p-limit": "^5.0.0"
   }
 }
