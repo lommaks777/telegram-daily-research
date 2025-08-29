@@ -1,0 +1,20 @@
+name: Daily Telegram Research Digest
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # 12:00 UTC = 09:00 America/Argentina/Buenos_Aires
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci || npm install
+      - run: node index.mjs
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
