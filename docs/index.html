@@ -1,3 +1,52 @@
-<!doctype html><meta charset="utf-8">
-<title>OK</title>
-<h1 style="font-family:system-ui;margin:24px">GitHub Pages: OK ✅</h1>
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Гипотезы — приоритеты</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:24px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:8px}
+th{cursor:pointer;background:#f7f7f7}
+tr:nth-child(even){background:#fafafa}
+.pill{padding:2px 8px;border-radius:12px;background:#eee}
+</style>
+</head><body>
+<h1>Топ гипотез (сортировка по score)</h1>
+<p>Обновляется ежедневно из RSS.</p>
+<table id="t"><thead><tr>
+<th data-k="date">Дата</th>
+<th data-k="section">Раздел</th>
+<th data-k="source">Источник</th>
+<th data-k="idea">Гипотеза</th>
+<th data-k="ease">Простота</th>
+<th data-k="potential">Потенциал</th>
+<th data-k="score">Score</th>
+<th data-k="link">Ссылка</th>
+</tr></thead><tbody></tbody></table>
+<script>
+let data=[],key='score';
+async function load(){
+ const r=await fetch('hypotheses.json');
+ data=await r.json();
+ render();
+}
+function render(){
+ const tb=document.querySelector('tbody');
+ tb.innerHTML='';
+ const rows=[...data].sort((a,b)=> b[key]-a[key]);
+ for(const x of rows){
+   const tr=document.createElement('tr');
+   tr.innerHTML=`<td>${x.date}</td><td>${x.section}</td><td>${x.source}</td>
+   <td>${x.idea}</td><td><span class="pill">${x.ease}</span></td>
+   <td><span class="pill">${x.potential}</span></td>
+   <td><span class="pill">${x.score.toFixed(1)}</span></td>
+   <td><a href="${x.link}" target="_blank">link</a></td>`;
+   tb.appendChild(tr);
+ }
+}
+document.querySelectorAll('th').forEach(th=>{
+ th.onclick=()=>{ key=th.dataset.k; render(); };
+});
+load();
+</script>
+</body></html>
