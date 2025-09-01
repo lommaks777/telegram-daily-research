@@ -3,6 +3,14 @@ import OpenAI from 'openai';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import pLimit from 'p-limit';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import { createObjectCsvWriter } from 'csv-writer';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const CHAT_ID = process.env.TG_CHAT_ID;
@@ -13,34 +21,40 @@ if (!BOT_TOKEN || !CHAT_ID) {
   process.exit(1);
 }
 
-const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 const parser = new Parser({ timeout: 15000 });
+const limit = pLimit(3);
 
-// ===== Источники (редактируй под себя) =====
+// === Настройки ===
+const FRESH_HOURS = 72;
+const PER_SECTION = 2;
+const MAX_CHARS = 8000;
+const DEDUPE_WINDOW_DAYS = 21; // окно против дублей
+
+// === Источники ===
 const FEEDS = {
   sales: [
     'https://blog.hubspot.com/marketing/rss.xml',
     'https://blog.hubspot.com/sales/rss.xml',
-    'https://cxl.com/blog/feed/',
-    'https://www.producthunt.com/feed'
+    'https://cxl.com/blog/feed/'
   ],
   edtech: [
     'https://www.classcentral.com/report/feed/',
-    'https://www.edsurge.com/articles_rss',
-    'https://www.reddit.com/r/edtech/.rss',
-    'https://edtechmagazine.com/k12/rss.xml'
+    'https://www.edsurge.com/articles_rss'
   ],
   massage: [
     'https://www.reddit.com/r/massage/.rss',
-    'https://www.reddit.com/r/MassageTherapists/.rss',
-    'https://news.google.com/rss/search?q=massage%20therapy%20study%20OR%20randomized%20controlled%20trial&hl=en-US&gl=US&ceid=US:en'
+    'https://www.reddit.com/r/MassageTherapists/.rss'
   ]
 };
 
-const FRESH_HOURS = 72;                // «свежесть» материалов
-const PER_SECTION = 2;                 // карточек из каждой категории
-const CONCURRENCY = 3;                 // параллелизм
-const MAX_CHARS_PER_ARTICLE = 8000;    // сколько текста отдаём в GPT
+// === Хранилище состояния (для анти-дублей) ===
+const STATE_PATH = path.join(__dirname, 'state.json');
+function loadState() { try { return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')); } catch { return { links: {}, hyps: {} }; } }
+function saveState(s) { fs.writeFileSync(STATE_PATH, JSON.stringify(s, null, 2)); }
+function nowTs() { return Math.floor(Date.now() / 1000); }
+function cutoffTs(days) { return nowTs() - days * 86400; }
+function sha(s){ return crypto.createHash('sha256').update(s).digest('hex'); }
 
 function toTs(dateLike) {
   const d = dateLike ? new Date(dateLike) : null;
@@ -50,145 +64,164 @@ function toTs(dateLike) {
 async function pickLatest(feedUrls, take = PER_SECTION) {
   const all = [];
   for (const url of feedUrls) {
-    try {
-      const feed = await parser.parseURL(url);
-      for (const item of (feed.items || [])) {
-        const ts = toTs(item.isoDate || item.pubDate || item.published || item.date);
-        all.push({
-          source: feed.title || url,
-          title: item.title?.trim() || '(без названия)',
-          link: item.link || item.guid || url,
-          ts
-        });
-      }
-    } catch (e) {
-      console.error('Feed error:', url, e.message);
+    const feed = await parser.parseURL(url);
+    for (const item of feed.items || []) {
+      const ts = toTs(item.isoDate || item.pubDate);
+      all.push({ title: item.title?.trim() || '(без названия)', link: item.link, ts });
     }
   }
   const freshLimit = Date.now() - FRESH_HOURS * 3600 * 1000;
   const fresh = all.filter(x => x.ts >= freshLimit);
-  const pool = (fresh.length ? fresh : all).sort((a, b) => b.ts - a.ts);
-  return pool.slice(0, take);
+  return (fresh.length ? fresh : all).sort((a, b) => b.ts - a.ts).slice(0, take * 2); // берём с запасом, дальше отрежем дубли
 }
 
-function esc(s = '') {
-  return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-}
-
-async function fetchArticleText(url) {
+async function fetchText(url) {
   try {
-    const r = await fetch(url, { redirect: 'follow' });
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (+digest-bot)' } });
     const html = await r.text();
     const dom = new JSDOM(html, { url });
     const reader = new Readability(dom.window.document);
-    const article = reader.parse();
-    const text = (article?.textContent || '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, MAX_CHARS_PER_ARTICLE);
-    return text;
-  } catch (e) {
-    console.error('Fetch/Readability error:', url, e.message);
-    return '';
+    return (reader.parse()?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, MAX_CHARS);
+  } catch { return ''; }
+}
+
+async function gptHypotheses(title, text) {
+  const sys = 'Ты — аналитик онлайн-школы массажа. Разбери статью на гипотезы. Для каждой верни JSON c полями: idea, ease (1–10: 10 — проще всего), potential (1–10: 10 — самый большой денежный эффект), rationale (почему). Коротко и по делу.';
+  const resp = await openai.responses.create({
+    model: 'gpt-4.1-mini',
+    input: [
+      { role: 'system', content: sys },
+      { role: 'user', content: `Заголовок: ${title}\nТекст: ${text}` }
+    ]
+  });
+  try { return JSON.parse(resp.output_text); } catch { return []; }
+}
+
+function esc(s=''){ return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+function chooseNewLinks(items, state) {
+  const cut = cutoffTs(DEDUPE_WINDOW_DAYS);
+  const filtered = [];
+  for (const it of items) {
+    const key = sha(it.link || it.title);
+    const ts = state.links[key] || 0;
+    if (ts < cut) filtered.push(it);
+  }
+  return filtered.slice(0, PER_SECTION);
+}
+
+function recordPostedLinks(items, state){
+  for (const it of items) {
+    const key = sha(it.link || it.title);
+    state.links[key] = nowTs();
   }
 }
 
-async function gptSummary(title, text) {
-  if (!openai) return '';
-  const sys = 'Ты — редактор телеграм-дайджеста для предпринимателя онлайн-школы массажа.'
-    + '\nСделай 1–2 предложения: почему читать и какая практическая польза (продажи/продукт/обучение). Без воды.';
-  try {
-    const resp = await openai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: [
-        { role: 'system', content: sys },
-        { role: 'user', content: `Заголовок: ${title}\nТекст: ${text}` }
-      ]
-    });
-    return resp.output_text?.trim() || '';
-  } catch (e) {
-    console.error('OpenAI summary error:', e.message);
-    return '';
+function dedupeHyps(hyps, state){
+  const cut = cutoffTs(DEDUPE_WINDOW_DAYS);
+  const out = [];
+  for (const h of hyps) {
+    const key = sha((h.idea||'').toLowerCase().trim() + '|' + (h.section||''));
+    const ts = state.hyps[key] || 0;
+    if (ts < cut) { out.push(h); state.hyps[key] = nowTs(); }
   }
+  return out;
 }
 
-async function formatItemGPT(x) {
-  const text = await fetchArticleText(x.link);
-  const summary = await gptSummary(x.title, text);
-  return `• <a href="${x.link}">${esc(x.title)}</a>${summary ? `\n<i>${esc(summary)}</i>` : ''}`;
-}
-
-async function section(title, items) {
-  if (!items.length) return '';
-  const limit = pLimit(CONCURRENCY);
-  const formatted = await Promise.all(items.map(item => limit(() => formatItemGPT(item))));
-  return `<b>${title}</b>\n${formatted.join('\n\n')}`;
-}
-
-async function generateHumanTakeaway(sections) {
-  if (!openai) return '';
-  const bullets = sections
-    .flatMap(s => s.items.map(x => `• [${s.title}] ${x.title}`))
-    .slice(0, 8)
-    .join('\n');
-  const sys = 'Ты — продукт-менеджер онлайн-школы массажа. Кратко предложи 1–2 предложения: конкретный эксперимент «Что протестировать у нас» (лендинг/оффер/воронка/удержание/геймификация). Без воды.';
-  try {
-    const resp = await openai.responses.create({
-      model: 'gpt-4.1-mini',
-      input: [
-        { role: 'system', content: sys },
-        { role: 'user', content: bullets }
-      ]
-    });
-    const text = resp.output_text?.trim();
-    return text ? `💡 <b>Что протестировать у нас:</b> ${esc(text)}` : '';
-  } catch (e) {
-    console.error('OpenAI takeaway error:', e.message);
-    return '';
+async function buildSection(title, rawItems, state){
+  const items = chooseNewLinks(rawItems, state);
+  const res = [];
+  for (const x of items) {
+    const text = await limit(() => fetchText(x.link));
+    const hyps = await limit(() => gptHypotheses(x.title, text));
+    for (const h of hyps) {
+      res.push({ section: title, source: x.link, idea: h.idea, ease: h.ease, potential: h.potential, rationale: h.rationale });
+    }
   }
+  const unique = dedupeHyps(res, state);
+  const lines = unique.map(h => `• ${esc(h.idea)}\n<i>Простота: ${h.ease}/10 · Потенциал: ${h.potential}/10</i>\n<code>${esc(h.rationale||'')}</code>`);
+  return { text: `<b>${title}</b>\n${lines.join('\n\n')}`, data: unique, postedItems: items };
 }
 
-async function main() {
-  const [sales, edtech, massage] = await Promise.all([
+async function main(){
+  const state = loadState();
+  const [salesRaw, edtechRaw, massageRaw] = await Promise.all([
     pickLatest(FEEDS.sales),
     pickLatest(FEEDS.edtech),
     pickLatest(FEEDS.massage)
   ]);
 
-  const date = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const takeaway = await generateHumanTakeaway([
-    { title: 'Продажи', items: sales },
-    { title: 'EdTech', items: edtech },
-    { title: 'Массаж', items: massage }
-  ]);
+  const date = new Date().toLocaleDateString('ru-RU');
+  const s1 = await buildSection('🚀 Продажи и маркетинг', salesRaw, state);
+  const s2 = await buildSection('📚 EdTech', edtechRaw, state);
+  const s3 = await buildSection('💆‍♂️ Массаж', massageRaw, state);
 
-  const parts = [
-    `<b>Ежедневный ресерч — ${date}</b>`,
-    await section('🚀 Продажи и маркетинг', sales),
-    await section('📚 Продукт онлайн-обучения (EdTech)', edtech),
-    await section('💆‍♂️ Массаж / мануальная терапия', massage),
-    takeaway,
-    '',
-    '⚙️ Автопост. Источники настраиваются в репозитории.'
-  ].filter(Boolean);
+  // Сообщение в канал (уже без дублей)
+  const parts = [`<b>Ежедневный ресерч — ${date}</b>`, s1.text, s2.text, s3.text, '', '⚙️ Автопост. Без дублей за последние 21 день.'];
+  const text = parts.filter(Boolean).join('\n\n');
 
-  const text = parts.join('\n\n');
-
-  const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML', disable_web_page_preview: true })
   });
 
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error(`Telegram error: ${resp.status} ${t}`);
-  }
+  // Сохраняем гипотезы в CSV (растущая база)
+  const csvPath = path.join(__dirname, 'hypotheses.csv');
+  const csvWriter = createObjectCsvWriter({
+    path: csvPath,
+    header: [
+      { id: 'date', title: 'Date' },
+      { id: 'section', title: 'Section' },
+      { id: 'idea', title: 'Idea' },
+      { id: 'ease', title: 'Ease' },
+      { id: 'potential', title: 'Potential' },
+      { id: 'rationale', title: 'Rationale' },
+      { id: 'source', title: 'Source' }
+    ],
+    append: fs.existsSync(csvPath)
+  });
+  const all = [...s1.data, ...s2.data, ...s3.data].map(x => ({ date, ...x }));
+  if (all.length) await csvWriter.writeRecords(all);
 
-  console.log('Posted');
+  // Собираем сайт (GitHub Pages): JSON + HTML, сортировка (потенциал ↓, простота ↓)
+  const siteDir = path.join(__dirname, 'site');
+  fs.mkdirSync(siteDir, { recursive: true });
+  const top = all.sort((a,b)=> (b.potential - a.potential) || (b.ease - a.ease)).slice(0, 200);
+  fs.writeFileSync(path.join(siteDir, 'hypotheses.json'), JSON.stringify(top, null, 2));
+  fs.writeFileSync(path.join(siteDir, 'index.html'), `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Гипотезы — приоритеты</title>
+<style>body{font-family:system-ui,Arial,sans-serif;margin:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{cursor:pointer;background:#f7f7f7}tr:nth-child(even){background:#fafafa}.pill{padding:2px 8px;border-radius:12px;background:#eee}</style>
+</head><body>
+<h1>Топ гипотез (сначала высокий потенциал и простота)</h1>
+<p>Клик по заголовку колонки — сортировка. Данные обновляются ежедневно.</p>
+<table id="t"><thead><tr>
+<th data-k="date">Дата</th>
+<th data-k="section">Раздел</th>
+<th data-k="idea">Гипотеза</th>
+<th data-k="ease">Простота</th>
+<th data-k="potential">Потенциал</th>
+<th data-k="rationale">Почему</th>
+<th data-k="source">Источник</th>
+</tr></thead><tbody></tbody></table>
+<script>
+let data=[],key='potential';
+async function load(){ const r = await fetch('hypotheses.json'); data = await r.json(); render(); }
+function render(){ const tb=document.querySelector('tbody'); tb.innerHTML='';
+  const rows=[...data].sort((a,b)=> (b[key]-a[key]) || (b.potential-a.potential) || (b.ease-a.ease));
+  for(const x of rows){ const tr=document.createElement('tr');
+    tr.innerHTML = \`<td>\${x.date||''}</td><td>\${x.section||''}</td><td>\${x.idea||''}</td><td><span class="pill">\${x.ease}</span></td><td><span class="pill">\${x.potential}</span></td><td>\${x.rationale||''}</td><td><a href="\${x.source}" target="_blank">link</a></td>\`;
+    tb.appendChild(tr);
+  }
+}
+document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; render(); });
+load();
+</script>
+</body></html>`);
+  // Обновляем отметки о размещённых ссылках
+  recordPostedLinks([...s1.postedItems, ...s2.postedItems, ...s3.postedItems], state);
+  saveState(state);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main();
