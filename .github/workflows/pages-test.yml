@@ -5,30 +5,21 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
     steps:
-      - name: Create simple site
+      - name: Create site
         run: |
           mkdir -p site
-          cat > site/index.html <<'HTML'
-<!doctype html><meta charset="utf-8">
-<title>Pages OK</title>
-<body style="font-family:system-ui,Arial,sans-serif;margin:24px">
-  <h1>GitHub Pages: OK ✅</h1>
-  <p>Этот файл сгенерирован workflow pages-test.yml.</p>
-</body>
-HTML
+          echo '<!doctype html><meta charset="utf-8"><title>OK</title><h1>GitHub Pages: OK ✅</h1>' > site/index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
       - name: Deploy
         uses: actions/deploy-pages@v4
