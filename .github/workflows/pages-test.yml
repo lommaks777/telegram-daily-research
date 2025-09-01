@@ -14,7 +14,14 @@ jobs:
       - name: Create site
         run: |
           mkdir -p site
-          echo '<!doctype html><meta charset="utf-8"><title>OK</title><h1>GitHub Pages: OK ✅</h1>' > site/index.html
+          cat > site/index.html <<'HTML'
+<!doctype html><meta charset="utf-8">
+<title>Pages OK</title>
+<body style="font-family:system-ui,Arial,sans-serif;margin:24px">
+  <h1>GitHub Pages: OK ✅</h1>
+  <p>Этот файл сгенерирован workflow <code>pages-test.yml</code>.</p>
+</body>
+HTML
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
