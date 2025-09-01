@@ -5,9 +5,15 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
     steps:
       - name: Create simple site
         run: |
@@ -16,22 +22,13 @@ jobs:
 <!doctype html><meta charset="utf-8">
 <title>Pages OK</title>
 <body style="font-family:system-ui,Arial,sans-serif;margin:24px">
-<h1>GitHub Pages: OK ✅</h1>
-<p>Если вы видите эту страницу — деплой через Actions работает.</p>
+  <h1>GitHub Pages: OK ✅</h1>
+  <p>Этот файл сгенерирован workflow pages-test.yml.</p>
 </body>
 HTML
-      - name: Upload Pages artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployer.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployer
+      - name: Deploy
         uses: actions/deploy-pages@v4
