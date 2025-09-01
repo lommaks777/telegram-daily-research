@@ -1,8 +1,10 @@
 name: Pages quick test
 on: workflow_dispatch
+
 permissions:
   pages: write
   id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -10,12 +12,26 @@ jobs:
       - name: Create simple site
         run: |
           mkdir -p site
-          echo '<!doctype html><meta charset="utf-8"><title>OK</title><h1>Pages OK</h1>' > site/index.html
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: site }
+          cat > site/index.html <<'HTML'
+<!doctype html><meta charset="utf-8">
+<title>Pages OK</title>
+<body style="font-family:system-ui,Arial,sans-serif;margin:24px">
+<h1>GitHub Pages: OK ✅</h1>
+<p>Если вы видите эту страницу — деплой через Actions работает.</p>
+</body>
+HTML
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployer.outputs.page_url }}
     steps:
-      - id: deploy
+      - name: Deploy to GitHub Pages
+        id: deployer
         uses: actions/deploy-pages@v4
