@@ -34,17 +34,28 @@ const DEDUPE_WINDOW_DAYS = 21; // окно против дублей
 // === Источники ===
 const FEEDS = {
   sales: [
-    'https://blog.hubspot.com/marketing/rss.xml',
-    'https://blog.hubspot.com/sales/rss.xml',
-    'https://cxl.com/blog/feed/'
+    // Современные подходы в продажах
+    'https://blog.hubspot.com/sales/rss.xml',                // HubSpot – блог о продажах
+    'https://thesalesblog.com/blog/rss.xml',                 // The Sales Blog (Anthony Iannarino)
+    'https://www.rainsalestraining.com/blog/rss.xml',        // Rain Group Sales Blog
+    'https://clickfunnels.com/blog/feed',                    // ClickFunnels Blog
+    'https://cxl.com/blog/feed/'                             // CXL (ConversionXL)
   ],
   edtech: [
-    'https://www.classcentral.com/report/feed/',
-    'https://www.edsurge.com/articles_rss'
+    // Разработка и продвижение онлайн-курсов
+    'https://feeds.feedburner.com/elearningindustry',        // eLearning Industry
+    'https://feeds.feedburner.com/theelearningcoach',        // The eLearning Coach (Connie Malamed)
+    'https://sellcoursesonline.com/feed',                    // Sell Courses Online Blog
+    'https://www.shiftelearning.com/blog/rss.xml',           // SHIFT’s eLearning Blog
+    'https://elearninguncovered.com/feed'                    // E-Learning Uncovered
   ],
   massage: [
-    'https://www.reddit.com/r/massage/.rss',
-    'https://www.reddit.com/r/MassageTherapists/.rss'
+    // Онлайновые курсы и ресурсы по массажу
+    'https://discovermassage.com.au/feed',                   // Discover Massage Australia Blog
+    'https://massagetherapyfoundation.org/feed/',            // Massage Therapy Foundation News
+    'https://www.academyofclinicalmassage.com/feed/',        // Academy of Clinical Massage
+    'https://realbodywork.com/feed',                         // Real Bodywork
+    'https://themtdc.com/feed'                               // Massage Therapist Development Centre
   ]
 };
 
