@@ -1,0 +1,36 @@
+name: Daily Research Digest
+
+on:
+  schedule:
+    - cron: '0 12 * * *'   # 12:00 UTC = 09:00 Buenos Aires
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # нужно, чтобы коммитить
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci || npm install
+
+      - name: Run digest (создаёт docs/index.html + docs/hypotheses.json)
+        run: node index.mjs
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Commit changes
+        run: |
+          git config user.name  "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs hypotheses.csv state.json || true
+          git commit -m "update site [skip ci]" || echo "no changes"
+          git push
