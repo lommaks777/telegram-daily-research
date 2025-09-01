@@ -48,7 +48,7 @@ const FEEDS = {
   ],
   massage: [
     'https://discovermassage.com.au/feed',            // Discover Massage Australia Blog
-    'https://massagetherapyfoundation.org/feed/',     // Massage Therapy Foundation News
+    'https://www.massagetherapyfoundation.org/feed/', // у них валидный сертификат на www Massage Therapy Foundation News
     'https://www.academyofclinicalmassage.com/feed/', // Academy of Clinical Massage
     'https://realbodywork.com/feed',                  // Real Bodywork
     'https://themtdc.com/feed'                        // Massage Therapist Development Centre
@@ -80,6 +80,7 @@ async function pickLatest(feedUrls, take = PER_SECTION) {
       }
     } catch (err) {
       console.error('Ошибка чтения RSS:', url, err.message);
+      continue; // не валим весь ран
     }
   }
   const freshLimit = Date.now() - FRESH_HOURS * 3600 * 1000;
@@ -89,11 +90,30 @@ async function pickLatest(feedUrls, take = PER_SECTION) {
 
 async function fetchText(url) {
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; GitHubActions/1.0; +https://github.com/)',
+        'Accept': 'text/html,application/xhtml+xml'
+      }
+    });
     const html = await r.text();
-    const dom = new JSDOM(html, { url });
-    const reader = new Readability(dom.window.document);
-    return (reader.parse()?.textContent || '').slice(0, MAX_CHARS);
+
+    try {
+      const dom = new JSDOM(html, { url, pretendToBeVisual: true });
+      const reader = new Readability(dom.window.document);
+      const parsed = reader.parse();
+      if (parsed?.textContent) return parsed.textContent.slice(0, MAX_CHARS);
+    } catch (e) {
+      console.error('Readability/JSDOM error:', e.message);
+    }
+
+    // Фолбэк: грубо вычистим теги, если Readability упал
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<\/?[^>]+(>|$)/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .slice(0, MAX_CHARS);
   } catch {
     return '';
   }
