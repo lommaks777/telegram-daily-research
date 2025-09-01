@@ -6,11 +6,12 @@ permissions:
   id-token: write
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
     steps:
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
       - name: Create site
         run: |
           mkdir -p site
@@ -28,5 +29,13 @@ HTML
         with:
           path: site
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy
+        id: deployment
         uses: actions/deploy-pages@v4
