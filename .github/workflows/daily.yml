@@ -6,12 +6,12 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # если коммитим файлы состояния (не обязательно)
+  contents: write   # если коммитим state/hypotheses.csv
   pages: write      # деплой GitHub Pages
   id-token: write
 
 jobs:
-  run:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,24 +22,39 @@ jobs:
 
       - run: npm ci || npm install
 
-      - name: Run digest (build site/)
+      # ❶ Запускаем дайджест, НО не валим сборку при ошибке
+      - name: Run digest (Telegram + GPT)
         run: node index.mjs
+        continue-on-error: true
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
+      # ❷ Гарантируем, что папка site/ существует даже если digest упал
+      - name: Ensure site exists
+        run: |
+          mkdir -p site
+          if [ ! -f site/index.html ]; then
+            cat > site/index.html <<'HTML'
+<!doctype html><meta charset="utf-8">
+<title>Гипотезы — страница собирается</title>
+<body style="font-family:system-ui,Arial,sans-serif;margin:24px">
+<h1>Страница деплоя собирается</h1>
+<p>Если вы видите это, шаг digest упал или ещё не создал файлы. Деплой Pages работает.</p>
+</body>
+HTML
+          fi
+
+      # ❸ Выгружаем артефакт для Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
-    needs: run
+    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
