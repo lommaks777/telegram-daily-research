@@ -18,7 +18,13 @@ if (!BOT_TOKEN || !CHAT_ID) {
 }
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-const parser = new Parser({ timeout: 15000 });
+const parser = new Parser({
+  timeout: 15000,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (compatible; GitHubActions/1.0; +https://github.com/)',
+    'Accept': 'application/rss+xml,application/xml;q=0.9,*/*;q=0.8'
+  }
+});
 const limit = pLimit(3);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,15 +67,19 @@ function toTs(dateLike) {
 async function pickLatest(feedUrls, take = PER_SECTION) {
   const all = [];
   for (const url of feedUrls) {
-    const feed = await parser.parseURL(url);
-    for (const item of feed.items || []) {
-      const ts = toTs(item.isoDate || item.pubDate);
-      all.push({
-        title: item.title?.trim() || '(без названия)',
-        link: item.link,
-        ts,
-        source: feed.title || url
-      });
+    try {
+      const feed = await parser.parseURL(url);
+      for (const item of feed.items || []) {
+        const ts = toTs(item.isoDate || item.pubDate);
+        all.push({
+          title: item.title?.trim() || '(без названия)',
+          link: item.link,
+          ts,
+          source: feed.title || url
+        });
+      }
+    } catch (err) {
+      console.error('Ошибка чтения RSS:', url, err.message);
     }
   }
   const freshLimit = Date.now() - FRESH_HOURS * 3600 * 1000;
