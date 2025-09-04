@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Гипотезы — приоритеты</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:24px}
 table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:8px}
+th,td{border:1px solid #ddd;padding:8px;vertical-align:top}
 th{cursor:pointer;background:#f7f7f7}
 tr:nth-child(even){background:#fafafa}
 .pill{padding:2px 8px;border-radius:12px;background:#eee}
+small{color:#666}
 </style>
 </head><body>
-<h1>Топ гипотез (сортировка по score)</h1>
-<p>Обновляется ежедневно из RSS.</p>
+<h1>Топ гипотез (по score)</h1>
+<p><small>Score = 0.6×Potential + 0.4×Ease. В таблице сохраняются все прошедшие порог гипотезы, старые записи не удаляются.</small></p>
 <table id="t"><thead><tr>
 <th data-k="date">Дата</th>
 <th data-k="section">Раздел</th>
@@ -21,32 +21,26 @@ tr:nth-child(even){background:#fafafa}
 <th data-k="ease">Простота</th>
 <th data-k="potential">Потенциал</th>
 <th data-k="score">Score</th>
+<th data-k="rationale">Почему</th>
 <th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
 <script>
-let data=[],key='score';
-async function load(){
- const r=await fetch('hypotheses.json');
- data=await r.json();
- render();
-}
+let data=[],key='score',dir=-1;
+async function load(){ const r=await fetch('hypotheses.json'); data=await r.json(); render(); }
+function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
 function render(){
- const tb=document.querySelector('tbody');
- tb.innerHTML='';
- const rows=[...data].sort((a,b)=> b[key]-a[key]);
- for(const x of rows){
-   const tr=document.createElement('tr');
-   tr.innerHTML=`<td>${x.date}</td><td>${x.section}</td><td>${x.source}</td>
-   <td>${x.idea}</td><td><span class="pill">${x.ease}</span></td>
-   <td><span class="pill">${x.potential}</span></td>
-   <td><span class="pill">${x.score.toFixed(1)}</span></td>
-   <td><a href="${x.link}" target="_blank">link</a></td>`;
-   tb.appendChild(tr);
- }
+  const tb=document.querySelector('tbody'); tb.innerHTML='';
+  const rows=[...data].sort(sortFn);
+  for(const x of rows){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${x.date||''}</td><td>${x.section||''}</td><td>${x.source||''}</td>
+    <td>${x.idea||''}</td><td><span class="pill">${x.ease}</span></td>
+    <td><span class="pill">${x.potential}</span></td><td><span class="pill">${(x.score||0).toFixed(1)}</span></td>
+    <td>${x.rationale||''}</td><td>${x.link?'<a target="_blank" href="'+x.link+'">link</a>':''}</td>`;
+    tb.appendChild(tr);
+  }
 }
-document.querySelectorAll('th').forEach(th=>{
- th.onclick=()=>{ key=th.dataset.k; render(); };
-});
+document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
 load();
 </script>
 </body></html>
