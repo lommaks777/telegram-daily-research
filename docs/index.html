@@ -9,14 +9,24 @@ th{cursor:pointer;background:#f7f7f7}
 tr:nth-child(even){background:#fafafa}
 .pill{padding:2px 8px;border-radius:12px;background:#eee}
 small{color:#666}
+.controls{margin:12px 0;display:flex;gap:8px;flex-wrap:wrap}
+button{padding:6px 10px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
+button.active{background:#efefef}
 </style>
 </head><body>
 <h1>Топ гипотез (по score)</h1>
-<p><small>Score = 0.6×Potential + 0.4×Ease. В таблице сохраняются все прошедшие порог гипотезы, старые записи не удаляются.</small></p>
+<p><small>Score = 0.6×Potential + 0.4×Ease. Копим все прошедшие порог гипотезы; старые записи не удаляются.</small></p>
+<div class="controls">
+  <button data-filter="all" class="active">Все</button>
+  <button data-filter="Реклама">Реклама</button>
+  <button data-filter="Воронка">Воронка</button>
+  <button data-filter="Продукт">Продукт</button>
+</div>
 <table id="t"><thead><tr>
 <th data-k="date">Дата</th>
 <th data-k="section">Раздел</th>
 <th data-k="source">Источник</th>
+<th data-k="category">Категория</th>
 <th data-k="idea">Гипотеза</th>
 <th data-k="ease">Простота</th>
 <th data-k="potential">Потенциал</th>
@@ -25,15 +35,16 @@ small{color:#666}
 <th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
 <script>
-let data=[],key='score',dir=-1;
+let data=[],key='score',dir=-1,filter='all';
 async function load(){ const r=await fetch('hypotheses.json'); data=await r.json(); render(); }
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
-  const rows=[...data].sort(sortFn);
+  const rows=[...data].filter(x=> filter==='all' ? true : (x.category===filter)).sort(sortFn);
   for(const x of rows){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${x.date||''}</td><td>${x.section||''}</td><td>${x.source||''}</td>
+    <td>${x.category||''}</td>
     <td>${x.idea||''}</td><td><span class="pill">${x.ease}</span></td>
     <td><span class="pill">${x.potential}</span></td><td><span class="pill">${(x.score||0).toFixed(1)}</span></td>
     <td>${x.rationale||''}</td><td>${x.link?'<a target="_blank" href="'+x.link+'">link</a>':''}</td>`;
@@ -41,6 +52,9 @@ function render(){
   }
 }
 document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
+document.querySelectorAll('.controls button').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('.controls button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
+});
 load();
 </script>
 </body></html>
