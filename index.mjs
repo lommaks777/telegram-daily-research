@@ -38,7 +38,7 @@ const defaultConfig = {
   },
   thresholds: {
     min_potential: 6,
-    min_score: null, // например 6.0 — если захочешь включить
+    min_score: null,
     score_weights: { potential: 0.6, ease: 0.4 }
   }
 };
@@ -69,7 +69,7 @@ const FEEDS = {
   ],
   massage: [
     'https://discovermassage.com.au/feed',
-    'https://www.massagetherapyfoundation.org/feed/', // важно: www
+    'https://www.massagetherapyfoundation.org/feed/',
     'https://www.academyofclinicalmassage.com/feed/',
     'https://realbodywork.com/feed',
     'https://themtdc.com/feed'
@@ -107,57 +107,71 @@ function passThresholds(h) {
   return true;
 }
 
-// --- Надёжный CSV-парсер (кавычки, запятые внутри полей)
+// --- CSV-парсер (кавычки/запятые) + фиксы BOM и заголовков ---
 function parseCsv(text) {
   const rows = [];
   let row = [], cell = '', inQuotes = false, i = 0;
   while (i < text.length) {
-    const char = text[i];
-    if (char === '"') {
+    const ch = text[i];
+    if (ch === '"') {
       if (inQuotes && text[i+1] === '"') { cell += '"'; i += 2; continue; }
       inQuotes = !inQuotes; i++; continue;
     }
-    if (!inQuotes && (char === ',' || char === '\n' || char === '\r')) {
+    if (!inQuotes && (ch === ',' || ch === '\n' || ch === '\r')) {
       row.push(cell); cell = '';
-      if (char === ',' ) { i++; continue; }
-      // конец строки
-      // пропускаем \r\n как один перенос
-      if (char === '\r' && text[i+1] === '\n') i++;
+      if (ch === ',') { i++; continue; }
+      if (ch === '\r' && text[i+1] === '\n') i++;
       i++;
       if (row.length) { rows.push(row); row = []; }
       continue;
     }
-    cell += char; i++;
+    cell += ch; i++;
   }
   if (cell.length || row.length) { row.push(cell); rows.push(row); }
   return rows.filter(r => r.length>0);
 }
+const norm = s => (s||'').replace(/^\uFEFF/, '').trim().toLowerCase(); // снимаем BOM у первого заголовка
 function loadCsv() {
   if (!fs.existsSync(CSV_PATH)) return [];
   const text = fs.readFileSync(CSV_PATH, 'utf-8');
   const rows = parseCsv(text);
   if (!rows.length) return [];
-  const header = rows[0];
-  const idx = (name) => header.indexOf(name);
-  const iDate = idx('Date'), iSection=idx('Section'), iSource=idx('Source'),
-        iCategory=idx('Category'), iIdea=idx('Idea'), iEase=idx('Ease'),
-        iPotential=idx('Potential'), iScore=idx('Score'), iLink=idx('Link'),
-        iRationale=idx('Rationale');
+  const header = rows[0].map(h => h.replace(/^\uFEFF/, '')); // ещё раз на всякий
+  const find = (name) => header.findIndex(h => norm(h) === norm(name));
+
+  const iDate = find('Date');
+  const iSection = find('Section');
+  const iSource = find('Source');
+  const iCategory = find('Category');
+  const iIdea = find('Idea');
+  const iEase = find('Ease');
+  const iPotential = find('Potential');
+  const iScore = find('Score');
+  const iLink = find('Link');
+  const iRationale = find('Rationale');
+
+  const missing = [ ['Date',iDate],['Section',iSection],['Source',iSource],['Category',iCategory],
+    ['Idea',iIdea],['Ease',iEase],['Potential',iPotential],['Score',iScore],['Link',iLink],['Rationale',iRationale]
+  ].filter(([,idx]) => idx === -1);
+  if (missing.length) {
+    console.warn('CSV header mismatch (likely BOM/renamed headers):', missing.map(([n])=>n).join(', '));
+  }
+
   const out = [];
   for (let k=1;k<rows.length;k++){
     const r = rows[k];
     if (!r || r.length===0) continue;
     out.push({
-      Date: r[iDate] ?? '',
-      Section: r[iSection] ?? '',
-      Source: r[iSource] ?? '',
-      Category: r[iCategory] ?? '',
-      Idea: r[iIdea] ?? '',
-      Ease: Number(r[iEase] ?? 0),
-      Potential: Number(r[iPotential] ?? 0),
-      Score: Number(r[iScore] ?? 0),
-      Link: r[iLink] ?? '',
-      Rationale: r[iRationale] ?? ''
+      Date:        iDate      !== -1 ? r[iDate]      : '',
+      Section:     iSection   !== -1 ? r[iSection]   : '',
+      Source:      iSource    !== -1 ? r[iSource]    : '',
+      Category:    iCategory  !== -1 ? r[iCategory]  : '',
+      Idea:        iIdea      !== -1 ? r[iIdea]      : '',
+      Ease:        iEase      !== -1 ? Number(r[iEase]      || 0) : 0,
+      Potential:   iPotential !== -1 ? Number(r[iPotential] || 0) : 0,
+      Score:       iScore     !== -1 ? Number(r[iScore]     || 0) : 0,
+      Link:        iLink      !== -1 ? r[iLink]      : '',
+      Rationale:   iRationale !== -1 ? r[iRationale] : ''
     });
   }
   return out;
@@ -332,13 +346,11 @@ async function postToTelegram(dateStr, bySection) {
     `\n🔗 Полная таблица: https://lommaks777.github.io/telegram-daily-research/`
   ].join('\n\n');
   try {
-    const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML', disable_web_page_preview: true })
     });
-    // Если надо отладить:
-    // const dbg = await resp.text(); console.log('Telegram:', resp.status, dbg.slice(0,300));
   } catch (e) {
     console.error('Telegram error:', e.message);
   }
@@ -404,7 +416,7 @@ button.active{background:#efefef}
 </tr></thead><tbody></tbody></table>
 <script>
 let data=[],key='score',dir=-1,filter='all';
-async function load(){ const r=await fetch('hypotheses.json'); data=await r.json(); render(); }
+async function load(){ const r=await fetch('hypotheses.json?ts='+Date.now()); data=await r.json(); render(); }
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
@@ -433,8 +445,8 @@ load();
 async function main(){
   const date = new Date().toLocaleDateString('ru-RU');
 
-  // 1) читаем CSV (старые записи) + анти-дубли
-  const existing = loadCsv();              // корректный парсинг CSV с кавычками
+  // 1) читаем CSV (с поддержкой BOM) + анти-дубли
+  const existing = loadCsv();
   const dedupSet = buildDedupSet(existing);
 
   // 2) парсим фиды, собираем новые гипотезы
@@ -457,7 +469,7 @@ async function main(){
     reallyNew.push(h);
   }
 
-  // 4) Telegram (если настроен)
+  // 4) Telegram
   const grouped = new Map([
     ['🚀 Продажи и маркетинг', reallyNew.filter(x=>x.section==='🚀 Продажи и маркетинг')],
     ['📚 EdTech',              reallyNew.filter(x=>x.section==='📚 EdTech')],
@@ -465,7 +477,7 @@ async function main(){
   ]);
   try { await postToTelegram(date, grouped); } catch {}
 
-  // 5) дозаписываем только отобранные в CSV
+  // 5) дозапись в CSV
   if (reallyNew.length) {
     const weights = CONFIG.thresholds?.score_weights || { potential: 0.6, ease: 0.4 };
     const toAppend = reallyNew.map(x => ({
