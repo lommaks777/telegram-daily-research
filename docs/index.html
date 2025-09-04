@@ -36,11 +36,11 @@ button.active{background:#efefef}
 </tr></thead><tbody></tbody></table>
 <script>
 let data=[],key='score',dir=-1,filter='all';
-async function load(){ const r=await fetch('hypotheses.json'); data=await r.json(); render(); }
+async function load(){ const r=await fetch('hypotheses.json?ts='+Date.now()); data=await r.json(); render(); }
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
-  const rows=[...data].filter(x=> filter==='all' ? true : (x.category===filter)).sort(sortFn);
+  const rows=[...data].filter(x=> filter==='all'?true:(x.category===filter)).sort(sortFn);
   for(const x of rows){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${x.date||''}</td><td>${x.section||''}</td><td>${x.source||''}</td>
