@@ -1,60 +1,98 @@
 <!doctype html><html lang="ru"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Гипотезы</title>
+<title>Гипотезы онлайн-школы массажа</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:24px}
-table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ddd;padding:8px;vertical-align:top}
-th{cursor:pointer;background:#f7f7f7}
-.pill{padding:2px 8px;border-radius:12px;background:#eee}
-.controls{margin:12px 0;display:flex;gap:8px;flex-wrap:wrap}
-button{padding:6px 10px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
+h1{margin:0 0 8px}
+.note{color:#666;margin:8px 0 12px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+button{padding:6px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer}
 button.active{background:#efefef}
-.note{margin:8px 0;color:#666}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #e6e6e6;padding:8px;vertical-align:top}
+th{background:#fafafa;cursor:pointer}
+.pill{padding:2px 8px;border-radius:12px;background:#f0f0f0}
+a{color:#0b69d0;text-decoration:none}
+a:hover{text-decoration:underline}
 </style></head><body>
 <h1>Топ гипотез (по score)</h1>
 <p class="note">Score = 0.6×Potential + 0.4×Ease. Можно переключать: релевантные / все записи.</p>
-
 <div class="controls">
-  <button id="viewRel" class="active">Релевантные</button>
-  <button id="viewAll">Все</button>
+  <button id="rel" class="active">Релевантные</button>
+  <button id="all">Все</button>
+  <button id="tab-ads">Реклама</button>
+  <button id="tab-funnel">Воронка</button>
+  <button id="tab-product">Продукт</button>
 </div>
-
 <table id="t"><thead><tr>
-<th data-k="date">Дата</th><th data-k="section">Раздел</th><th data-k="source">Источник</th>
-<th data-k="category">Категория</th><th data-k="idea">Гипотеза</th>
-<th data-k="ease">Простота</th><th data-k="potential">Потенциал</th><th data-k="score">Score</th>
-<th data-k="rationale">Почему</th><th data-k="link">Ссылка</th>
+  <th data-k="date">Дата</th>
+  <th data-k="section">Раздел</th>
+  <th data-k="source">Источник</th>
+  <th data-k="category">Категория</th>
+  <th data-k="idea">Гипотеза</th>
+  <th data-k="ease">Простота</th>
+  <th data-k="potential">Потенциал</th>
+  <th data-k="score">Score</th>
+  <th data-k="rationale">Почему</th>
+  <th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
 
 <script>
-let data=[], all=[], key='score', dir=-1, useAll=false;
-async function get(u){ try{ const r=await fetch(u+'?ts='+Date.now()); if(!r.ok) throw 0; return await r.json(); }catch{return [];}}
-async function load(){
-  data = await get('hypotheses.json');
-  all  = await get('hypotheses_all.json');
-  if(!data.length && all.length){ useAll=true; document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); }
-  render();
+let rel=true, cat='ALL', k='score', dir=-1, relData=[], allData=[];
+async function get(u){ try{const r=await fetch(u+'?ts='+Date.now()); if(!r.ok) throw 0; return await r.json();}catch{return [];}}
+function norm(x){return {
+  date:x.date||x.Date||'',
+  section:x.section||x.Section||'',
+  source:x.source||x.Source||'',
+  category:x.category||x.Category||'',
+  idea:x.idea||x.Idea||'',
+  ease:Number(x.ease??x.Ease??0),
+  potential:Number(x.potential??x.Potential??0),
+  score:Number(x.score??x.Score??0),
+  rationale:x.rationale||x.Rationale||'',
+  link:x.link||x.Link||''
+};}
+function passCat(x){
+  if(cat==='ALL') return true;
+  if(cat==='Реклама') return /реклам/i.test(x.category);
+  if(cat==='Воронка') return /ворон/i.test(x.category);
+  if(cat==='Продукт') return /продукт/i.test(x.category);
+  return true;
 }
-function sortFn(a,b){ const av=a[key], bv=b[key]; if(av===bv) return 0; return (av>bv?1:-1)*dir; }
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
-  const src = useAll?all:data;
-  const rows=[...src].sort(sortFn);
-  for(const x of rows){
-    const sc=Number(x.score||x.Score||0);
+  const data = (rel ? relData : allData).map(norm).filter(passCat);
+  data.sort((a,b)=> (a[k]===b[k]?0:(a[k]>b[k]?1:-1))*dir);
+  for(const x of data){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${x.date||x.Date||''}</td><td>${x.section||x.Section||''}</td><td>${x.source||x.Source||''}</td>
-<td>${x.category||x.Category||''}</td><td>${x.idea||x.Idea||''}</td>
-<td><span class="pill">${x.ease??x.Ease??''}</span></td>
-<td><span class="pill">${x.potential??x.Potential??''}</span></td>
-<td><span class="pill">${Number.isFinite(sc)?sc.toFixed(1):'0.0'}</span></td>
-<td>${x.rationale||x.Rationale||''}</td><td>${(x.link||x.Link)?'<a target="_blank" href="'+(x.link||x.Link)+'">link</a>':''}</td>`;
+    tr.innerHTML=`
+      <td>${x.date}</td><td>${x.section}</td><td>${x.source}</td>
+      <td>${x.category}</td><td>${x.idea}</td>
+      <td><span class="pill">${x.ease}</span></td>
+      <td><span class="pill">${x.potential}</span></td>
+      <td><span class="pill">${x.score.toFixed(1)}</span></td>
+      <td>${x.rationale}</td>
+      <td>${x.link ? '<a target="_blank" href="'+x.link+'">link</a>' : ''}</td>`;
     tb.appendChild(tr);
   }
 }
-document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
-document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
-document.getElementById('viewAll').onclick=()=>{ useAll=true; document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
-load();
-</script></body></html>
+async function boot(){
+  relData = await get('hypotheses.json');
+  allData = await get('hypotheses_all.json');
+  // если релевантных пока нет — покажем ВСЕ по умолчанию
+  if(!relData.length && allData.length){
+    rel=false;
+    document.getElementById('all').classList.add('active');
+    document.getElementById('rel').classList.remove('active');
+  }
+  render();
+}
+document.querySelectorAll('th').forEach(th => th.onclick=()=>{k=th.dataset.k; dir*=-1; render();});
+document.getElementById('rel').onclick=()=>{rel=true;  this?.classList?.add?.('active'); document.getElementById('rel').classList.add('active'); document.getElementById('all').classList.remove('active'); render();};
+document.getElementById('all').onclick=()=>{rel=false; document.getElementById('all').classList.add('active'); document.getElementById('rel').classList.remove('active'); render();};
+document.getElementById('tab-ads').onclick=()=>{cat='Реклама'; render();};
+document.getElementById('tab-funnel').onclick=()=>{cat='Воронка'; render();};
+document.getElementById('tab-product').onclick=()=>{cat='Продукт'; render();};
+boot();
+</script>
+</body></html>
