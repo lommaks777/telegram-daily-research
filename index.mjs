@@ -133,9 +133,9 @@ function inferCategory(idea='') {
 function isRelevant(idea='', rationale='', section='', category='') {
   const text = [idea, rationale, section].join(' ');
   if (!idea.trim()) return false;
-  if (isLikelyEnglish(text)) return false;                 // явный английский – вон
-  if (REJECT_PATTERNS.some(rx => rx.test(text))) return false; // SaaS/K8s и т.п. – вон
-  return true; // остальное оставляем
+  if (isLikelyEnglish(text)) return false;
+  if (REJECT_PATTERNS.some(rx => rx.test(text))) return false;
+  return true;
 }
 
 /* ========= CSV v0/v1 ========= */
@@ -346,8 +346,8 @@ async function postToTelegram(dateStr, bySection) {
 
 /* ========= SITE ========= */
 function writeSite(allRowsFiltered, allRowsRaw) {
-  const fsPath = path.join(DOCS_DIR, 'hypotheses.json');
-  fs.writeFileSync(fsPath, JSON.stringify(allRowsFiltered, null, 2));
+  // сохраняем файлы на всякий
+  fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses.json'), JSON.stringify(allRowsFiltered, null, 2));
   fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses_all.json'), JSON.stringify(allRowsRaw, null, 2));
 
   const w = CONFIG.thresholds?.score_weights || { potential:0.6, ease:0.4 };
@@ -365,18 +365,21 @@ small{color:#666}
 .controls{margin:12px 0;display:flex;gap:8px;flex-wrap:wrap}
 button{padding:6px 10px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
 button.active{background:#efefef}
+.note{margin:8px 0;color:#666}
 </style>
 </head><body>
 <h1>Топ гипотез (по score)</h1>
-<p><small>Score = ${w.potential}×Potential + ${w.ease}×Ease. Можно показать «Релевантные» (фильтр) или «Все».</small></p>
+<p class="note">Score = ${w.potential}×Potential + ${w.ease}×Ease. В таблице можно переключать: только релевантные для школы массажа / все записи.</p>
+
 <div class="controls">
   <button id="viewRel" class="active">Релевантные</button>
   <button id="viewAll">Все</button>
-  <button data-filter="all" class="active">Все категории</button>
+  <button data-filter="all" class="active">Все</button>
   <button data-filter="Реклама">Реклама</button>
   <button data-filter="Воронка">Воронка</button>
   <button data-filter="Продукт">Продукт</button>
 </div>
+
 <table id="t"><thead><tr>
 <th data-k="date">Дата</th>
 <th data-k="section">Раздел</th>
@@ -389,26 +392,43 @@ button.active{background:#efefef}
 <th data-k="rationale">Почему</th>
 <th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
+
+<script>
+// --- встроенный резерв данных ---
+window.__REL__ = ${JSON.stringify(allRowsFiltered)};
+window.__ALL__ = ${JSON.stringify(allRowsRaw)};
+</script>
+
 <script>
 let data=[], all=[], key='score', dir=-1, filter='all', useAll=false;
 
-async function load(){
-  const [r1,r2] = await Promise.all([
-    fetch('hypotheses.json?ts='+Date.now()),
-    fetch('hypotheses_all.json?ts='+Date.now())
-  ]);
-  data = await r1.json();
-  all  = await r2.json();
+async function tryFetch(url){
+  try {
+    const r = await fetch(url+'?ts='+Date.now());
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) { return null; }
+}
 
-  // если чистая витрина пустая — сразу показываем «Все»
-  if (!Array.isArray(data) || data.length===0) {
+async function load(){
+  // пробуем загрузить с диска сайта
+  const rel = await tryFetch('hypotheses.json');
+  const allj = await tryFetch('hypotheses_all.json');
+
+  data = Array.isArray(rel)  ? rel  : (Array.isArray(window.__REL__)? window.__REL__ : []);
+  all  = Array.isArray(allj) ? allj : (Array.isArray(window.__ALL__)? window.__ALL__ : []);
+
+  // если «релевантные» пустые — показываем «Все»
+  if (!data.length && all.length) {
     useAll = true;
     document.getElementById('viewAll').classList.add('active');
     document.getElementById('viewRel').classList.remove('active');
   }
   render();
 }
+
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
+
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
   const src = useAll ? all : data;
@@ -417,18 +437,20 @@ function render(){
     const tr=document.createElement('tr');
     tr.innerHTML=\`<td>\${x.date||''}</td><td>\${x.section||''}</td><td>\${x.source||''}</td>
     <td>\${x.category||''}</td>
-    <td>\${x.idea||''}</td><td><span class="pill">\${x.ease}</span></td>
-    <td><span class="pill">\${x.potential}</span></td><td><span class="pill">\${(x.score||0).toFixed(1)}</span></td>
+    <td>\${x.idea||''}</td><td><span class="pill">\${x.ease??''}</span></td>
+    <td><span class="pill">\${x.potential??''}</span></td><td><span class="pill">\${(x.score??0).toFixed(1)}</span></td>
     <td>\${x.rationale||''}</td><td>\${x.link?'<a target="_blank" href="'+x.link+'">link</a>':''}</td>\`;
     tb.appendChild(tr);
   }
 }
+
 document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
 document.querySelectorAll('.controls button[data-filter]').forEach(b=>{
   b.onclick=()=>{ document.querySelectorAll('.controls button[data-filter]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
 });
 document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
 document.getElementById('viewAll').onclick=()=>{ useAll=true;  document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
+
 load();
 </script>
 </body></html>`;
