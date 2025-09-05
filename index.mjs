@@ -56,12 +56,12 @@ const todayRu = () => new Date().toLocaleDateString('ru-RU');
 const score = (ease, potential) => WEIGHTS.potential*Number(potential||0) + WEIGHTS.ease*Number(ease||0);
 
 // фильтрация «релевантных»
-function isRelevant(idea='', rationale='', section='') {
-  const s=(idea+rationale+section).toLowerCase();
+function isRelevant(idea='', rationale='', section='', category='') {
+  const text = [idea, rationale, section].join(' ');
   if (!idea.trim()) return false;
-  const latin=(s.match(/[A-Za-z]/g)||[]).length, cyr=(s.match(/[А-Яа-яЁё]/g)||[]).length;
-  if (latin>120 && cyr<10) return false; // англ-полотно
-  if (/\bsaas\b|kubernetes|api gateway|container|microservice|multi\-tenant/i.test(s)) return false;
+  if (isLikelyEnglish(text)) return false;
+  if (REJECT_PATTERNS.some(rx => rx.test(text))) return false;
+  if (!containsAnyKeyword(text, MUST_HAVE_ANY)) return false;
   return true;
 }
 
