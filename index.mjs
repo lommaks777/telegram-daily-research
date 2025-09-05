@@ -1,4 +1,4 @@
-// index.mjs
+// index.mjs (robust)
 
 import fs from 'fs';
 import path from 'path';
@@ -96,7 +96,7 @@ async function pickLatest(feedUrls, take = 2, freshHours = 72) {
   for (const url of feedUrls) {
     try {
       const feed = await parser.parseURL(url);
-      for (const item of feed.items || []) {
+      for (const item of (feed.items || [])) {
         const ts = (item.isoDate || item.pubDate)
           ? new Date(item.isoDate || item.pubDate).valueOf()
           : 0;
@@ -150,6 +150,47 @@ async function gptHypotheses(openai, title, text) {
 }
 
 /* ===== CSV ===== */
+// безопасный парсер строки CSV с кавычками
+function parseCsvLine(line = '') {
+  const out = []; let cur = ''; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (q && line[i + 1] === '"') { cur += '"'; i++; }
+      else q = !q;
+    } else if (!q && ch === ',') {
+      out.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// безопасная загрузка CSV (пустые файлы, BOM, без заголовка)
+function loadCsv(file) {
+  if (!fs.existsSync(file)) return [];
+  let txt = fs.readFileSync(file, 'utf8');
+  if (!txt || !txt.trim()) return [];
+  txt = txt.replace(/^\uFEFF/, ''); // BOM
+  const lines = txt.split(/\r?\n/).filter(l => l.length > 0);
+  if (!lines.length) return [];
+  const headerLine = lines.shift();
+  if (!headerLine) return [];                     // нет заголовка — ничего не читаем
+  const headers = parseCsvLine(headerLine);
+  if (!headers.length) return [];
+
+  const rows = [];
+  for (const l of lines) {
+    const vals = parseCsvLine(l);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = vals[i] ?? ''; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
 function appendCsv(file, rows) {
   if (!rows?.length) return Promise.resolve();
   const writer = createObjectCsvWriter({
@@ -165,28 +206,72 @@ function appendCsv(file, rows) {
   });
   return writer.writeRecords(rows);
 }
-function loadCsv(file) {
-  if (!fs.existsSync(file)) return [];
-  const txt = fs.readFileSync(file, 'utf8');
-  const [headerLine, ...lines] = txt.split(/\r?\n/).filter(Boolean);
-  const headers = headerLine.split(',');
-  return lines.map(l => {
-    const vals = l.split(',');
-    const obj = {};
-    headers.forEach((h, i) => { obj[h] = vals[i]; });
-    return obj;
-  });
-}
 
 /* ===== SITE ===== */
 function writeSite(cleanRows, rawRows) {
   fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses.json'), JSON.stringify(cleanRows, null, 2));
   fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses_all.json'), JSON.stringify(rawRows, null, 2));
-  // простая HTML-таблица (оставил из предыдущей версии)
-  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>Гипотезы</title></head>
-<body><h1>Гипотезы</h1><pre id="data"></pre>
-<script>fetch('hypotheses.json').then(r=>r.json()).then(j=>{document.getElementById('data').textContent=JSON.stringify(j,null,2)});</script>
-</body></html>`;
+
+  const html = `<!doctype html><html lang="ru"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Гипотезы</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:24px}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ddd;padding:8px;vertical-align:top}
+th{cursor:pointer;background:#f7f7f7}
+.pill{padding:2px 8px;border-radius:12px;background:#eee}
+.controls{margin:12px 0;display:flex;gap:8px;flex-wrap:wrap}
+button{padding:6px 10px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
+button.active{background:#efefef}
+.note{margin:8px 0;color:#666}
+</style></head><body>
+<h1>Топ гипотез (по score)</h1>
+<p class="note">Score = ${WEIGHTS.potential}×Potential + ${WEIGHTS.ease}×Ease. Можно переключать: релевантные / все записи.</p>
+
+<div class="controls">
+  <button id="viewRel" class="active">Релевантные</button>
+  <button id="viewAll">Все</button>
+</div>
+
+<table id="t"><thead><tr>
+<th data-k="date">Дата</th><th data-k="section">Раздел</th><th data-k="source">Источник</th>
+<th data-k="category">Категория</th><th data-k="idea">Гипотеза</th>
+<th data-k="ease">Простота</th><th data-k="potential">Потенциал</th><th data-k="score">Score</th>
+<th data-k="rationale">Почему</th><th data-k="link">Ссылка</th>
+</tr></thead><tbody></tbody></table>
+
+<script>
+let data=[], all=[], key='score', dir=-1, useAll=false;
+async function get(u){ try{ const r=await fetch(u+'?ts='+Date.now()); if(!r.ok) throw 0; return await r.json(); }catch{return [];}}
+async function load(){
+  data = await get('hypotheses.json');
+  all  = await get('hypotheses_all.json');
+  if(!data.length && all.length){ useAll=true; document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); }
+  render();
+}
+function sortFn(a,b){ const av=a[key], bv=b[key]; if(av===bv) return 0; return (av>bv?1:-1)*dir; }
+function render(){
+  const tb=document.querySelector('tbody'); tb.innerHTML='';
+  const src = useAll?all:data;
+  const rows=[...src].sort(sortFn);
+  for(const x of rows){
+    const sc=Number(x.score||x.Score||0);
+    const tr=document.createElement('tr');
+    tr.innerHTML=\`<td>\${x.date||x.Date||''}</td><td>\${x.section||x.Section||''}</td><td>\${x.source||x.Source||''}</td>
+<td>\${x.category||x.Category||''}</td><td>\${x.idea||x.Idea||''}</td>
+<td><span class="pill">\${x.ease??x.Ease??''}</span></td>
+<td><span class="pill">\${x.potential??x.Potential??''}</span></td>
+<td><span class="pill">\${Number.isFinite(sc)?sc.toFixed(1):'0.0'}</span></td>
+<td>\${x.rationale||x.Rationale||''}</td><td>\${(x.link||x.Link)?'<a target="_blank" href="'+(x.link||x.Link)+'">link</a>':''}</td>\`;
+    tb.appendChild(tr);
+  }
+}
+document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
+document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
+document.getElementById('viewAll').onclick=()=>{ useAll=true; document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
+load();
+</script></body></html>`;
   fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), html);
 }
 
@@ -233,7 +318,7 @@ async function main() {
   const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
   const dateStr = todayRu();
 
-  const rawBefore = loadCsv(CSV_FILE);
+  const rawBefore = loadCsv(CSV_FILE); // теперь безопасно
 
   const [s, e, m] = await Promise.all([
     pickLatest(FEEDS.sales), pickLatest(FEEDS.edtech), pickLatest(FEEDS.massage)
