@@ -1,5 +1,5 @@
-<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<!doctype html><html lang="ru"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Гипотезы — приоритеты</title>
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:24px}
@@ -8,15 +8,13 @@ th,td{border:1px solid #ddd;padding:8px;vertical-align:top}
 th{cursor:pointer;background:#f7f7f7}
 tr:nth-child(even){background:#fafafa}
 .pill{padding:2px 8px;border-radius:12px;background:#eee}
-small{color:#666}
 .controls{margin:12px 0;display:flex;gap:8px;flex-wrap:wrap}
 button{padding:6px 10px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer}
 button.active{background:#efefef}
 .note{margin:8px 0;color:#666}
-</style>
-</head><body>
+</style></head><body>
 <h1>Топ гипотез (по score)</h1>
-<p class="note">Score = 0.6×Potential + 0.4×Ease. В таблице можно переключать: только релевантные для школы массажа / все записи.</p>
+<p class="note">Score = 0.6×Potential + 0.4×Ease. Можно переключать: релевантные / все записи.</p>
 
 <div class="controls">
   <button id="viewRel" class="active">Релевантные</button>
@@ -28,76 +26,43 @@ button.active{background:#efefef}
 </div>
 
 <table id="t"><thead><tr>
-<th data-k="date">Дата</th>
-<th data-k="section">Раздел</th>
-<th data-k="source">Источник</th>
-<th data-k="category">Категория</th>
-<th data-k="idea">Гипотеза</th>
-<th data-k="ease">Простота</th>
-<th data-k="potential">Потенциал</th>
-<th data-k="score">Score</th>
-<th data-k="rationale">Почему</th>
-<th data-k="link">Ссылка</th>
+<th data-k="date">Дата</th><th data-k="section">Раздел</th><th data-k="source">Источник</th>
+<th data-k="category">Категория</th><th data-k="idea">Гипотеза</th>
+<th data-k="ease">Простота</th><th data-k="potential">Потенциал</th><th data-k="score">Score</th>
+<th data-k="rationale">Почему</th><th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
 
-<script>
-// --- встроенный резерв данных ---
-window.__REL__ = [];
-window.__ALL__ = [{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""}];
-</script>
-
+<script>window.__REL__=[];window.__ALL__=[{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""},{"date":"","section":"","source":"","category":"","idea":"","ease":0,"potential":0,"score":0,"rationale":"","link":""}];</script>
 <script>
 let data=[], all=[], key='score', dir=-1, filter='all', useAll=false;
-
-async function tryFetch(url){
-  try {
-    const r = await fetch(url+'?ts='+Date.now());
-    if (!r.ok) throw new Error(r.status);
-    return await r.json();
-  } catch(e) { return null; }
-}
-
+async function tryFetch(u){ try{ const r=await fetch(u+'?ts='+Date.now()); if(!r.ok) throw 0; return await r.json(); }catch{return null;}}
 async function load(){
-  // пробуем загрузить с диска сайта
-  const rel = await tryFetch('hypotheses.json');
-  const allj = await tryFetch('hypotheses_all.json');
-
-  data = Array.isArray(rel)  ? rel  : (Array.isArray(window.__REL__)? window.__REL__ : []);
-  all  = Array.isArray(allj) ? allj : (Array.isArray(window.__ALL__)? window.__ALL__ : []);
-
-  // если «релевантные» пустые — показываем «Все»
-  if (!data.length && all.length) {
-    useAll = true;
-    document.getElementById('viewAll').classList.add('active');
-    document.getElementById('viewRel').classList.remove('active');
-  }
+  const a=await tryFetch('hypotheses.json'); const b=await tryFetch('hypotheses_all.json');
+  data=Array.isArray(a)?a:Array.isArray(window.__REL__)?window.__REL__:[];
+  all =Array.isArray(b)?b:Array.isArray(window.__ALL__)?window.__ALL__:[];
+  if(!data.length && all.length){ useAll=true; document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); }
   render();
 }
-
-function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
-
+function sortFn(a,b){ const av=a[key], bv=b[key]; if(av===bv) return 0; return (av>bv?1:-1)*dir; }
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
-  const src = useAll ? all : data;
+  const src=useAll?all:data;
   const rows=[...src].filter(x=> filter==='all'?true:(x.category===filter)).sort(sortFn);
   for(const x of rows){
+    const sc=Number.isFinite(x.score)?x.score:Number(x.score||0);
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${x.date||''}</td><td>${x.section||''}</td><td>${x.source||''}</td>
-    <td>${x.category||''}</td>
-    <td>${x.idea||''}</td><td><span class="pill">${x.ease??''}</span></td>
-    <td><span class="pill">${x.potential??''}</span></td><td><span class="pill">${(x.score??0).toFixed(1)}</span></td>
-    <td>${x.rationale||''}</td><td>${x.link?'<a target="_blank" href="'+x.link+'">link</a>':''}</td>`;
+<td>${x.category||''}</td><td>${x.idea||''}</td>
+<td><span class="pill">${Number.isFinite(x.ease)?x.ease:''}</span></td>
+<td><span class="pill">${Number.isFinite(x.potential)?x.potential:''}</span></td>
+<td><span class="pill">${Number.isFinite(sc)?sc.toFixed(1):'0.0'}</span></td>
+<td>${x.rationale||''}</td><td>${x.link?'<a target="_blank" href="'+x.link+'">link</a>':''}</td>`;
     tb.appendChild(tr);
   }
 }
-
 document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
-document.querySelectorAll('.controls button[data-filter]').forEach(b=>{
-  b.onclick=()=>{ document.querySelectorAll('.controls button[data-filter]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
-});
+document.querySelectorAll('.controls button[data-filter]').forEach(b=> b.onclick=()=>{ document.querySelectorAll('.controls button[data-filter]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); });
 document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
-document.getElementById('viewAll').onclick=()=>{ useAll=true;  document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
-
+document.getElementById('viewAll').onclick=()=>{ useAll=true; document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
 load();
-</script>
-</body></html>
+</script></body></html>
