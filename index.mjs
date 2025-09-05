@@ -9,13 +9,11 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createObjectCsvWriter } from 'csv-writer';
 
-/* ==============================
-   ENV & PATHS
-============================== */
+/* ========= ENV / PATHS ========= */
 const BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const CHAT_ID   = process.env.TG_CHAT_ID;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const PRUNE_CSV = String(process.env.PRUNE_CSV || '').toLowerCase() === 'true'; // если true — перепишем CSV отфильтрованным
+const PRUNE_CSV = String(process.env.PRUNE_CSV || '').toLowerCase() === 'true';
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
@@ -25,18 +23,14 @@ const CSV_PATH   = path.join(__dirname, 'hypotheses.csv');
 const DOCS_DIR   = path.join(__dirname, 'docs');
 fs.mkdirSync(DOCS_DIR, { recursive: true });
 
-/* ==============================
-   CONFIG
-============================== */
+/* ========= CONFIG ========= */
 const defaultConfig = {
   business_context:
     "Онлайн-школа массажа. Воронка: таргет → автовебинар → цепочка писем → живые вебинары. KPI: рост LTV/маржинальности, снижение CPL.",
   constraints: { max_budget_usd: 2000, max_duration_weeks: 2, has_no_dev_team: true, reject_non_massage: true },
   scoring: {
-    ease: { definition: "Сколько времени/ресурсов нужно (≤2 недели, ≤$2000, без dev).",
-            scale: { "1":"Очень сложно","5":"Средне","10":"Очень легко: 1–3 дня, <$100" } },
-    potential: { definition: "Снижение CPL, рост конверсии и LTV/маржинальности.",
-                 scale: { "1":"Минимально","5":"10–20%","10":"x2 и более" } }
+    ease: { definition: "Сколько времени/ресурсов нужно (≤2 недели, ≤$2000, без dev)." },
+    potential: { definition: "Снижение CPL, рост конверсии и LTV/маржинальности." }
   },
   thresholds: { min_potential: 6, min_score: null, score_weights: { potential:0.6, ease:0.4 } }
 };
@@ -48,9 +42,7 @@ function loadConfig() {
 }
 const CONFIG = loadConfig();
 
-/* ==============================
-   RSS источники
-============================== */
+/* ========= RSS ========= */
 const FEEDS = {
   sales: [
     'https://blog.hubspot.com/sales/rss.xml',
@@ -75,9 +67,7 @@ const FEEDS = {
   ]
 };
 
-/* ==============================
-   Helpers & Filters
-============================== */
+/* ========= HELPERS / FILTERS ========= */
 const parser = new Parser({
   timeout: 15000,
   headers: {
@@ -107,47 +97,50 @@ function passThresholds(h) {
   return true;
 }
 
-// детектор англоязычности
+// мягкий англ-детектор: отбрасываем только явно англоязычные полотна
 function isLikelyEnglish(s='') {
   const latin = (s.match(/[A-Za-z]/g)||[]).length;
   const cyr   = (s.match(/[А-Яа-яЁё]/g)||[]).length;
-  return latin > 10 && latin > cyr * 0.7; // грубо: много латиницы и больше кириллицы
+  return latin > 120 && cyr < 10;
 }
 
-// явные чужие домены (инфра/SaaS-перпользователь и пр.)
+// «чужие» темы
 const REJECT_PATTERNS = [
-  /\bsaas\b/i, /\bper[-\s]?user\b/i, /\bmicroservice/i, /\bkubernetes\b/i, /\bapi\s?gateway\b/i,
-  /\bcontainerization\b/i, /\bmicro\-?frontend/i, /\bmulti\-tenant/i
+  /\bsaas\b/i, /\bper[-\s]?user\b/i, /\bkubernetes\b/i, /\bapi\s?gateway\b/i,
+  /\bcontainerization\b/i, /\bmicroservice/i, /\bmicro\-?frontend/i, /\bmulti\-tenant/i
 ];
 
-// ключевые слова применимости к нашей школе
+// признаки применимости к школе массажа
 const MUST_HAVE_ANY = [
-  'массаж','мануальн','школ','курс','обучен','ученик','вебинар','урок','анатом','практик'
+  'массаж','мануальн','школ','школь','онлайн-школ','курс','курсы','обучен','обучающ',
+  'ученик','студент','выпускник','урок','модуль','программа','сертифик',
+  'вебинар','автовебинар','мастер-класс','практик','анатом','техника'
 ];
 
 function containsAnyKeyword(s, list = MUST_HAVE_ANY) {
   const low = (s||'').toLowerCase();
   return list.some(k => low.includes(k));
 }
-
-function isRelevantIdea(idea='') {
-  if (!idea.trim()) return false;
-  if (isLikelyEnglish(idea)) return false;
-  if (!containsAnyKeyword(idea)) return false;
-  if (REJECT_PATTERNS.some(rx => rx.test(idea))) return false;
-  return true;
+function haystack(idea='', rationale='', section='') {
+  return [idea, rationale, section].join(' ').toLowerCase();
 }
-
 function inferCategory(idea='') {
   const s = idea.toLowerCase();
   if (/(ads?|таргет|креатив|facebook|meta|tiktok|google|лендинг|посадочн|utm|аудитор)/.test(s)) return 'Реклама';
   if (/(воронк|webinar|вебинар|емейл|письм|ретаргет|лид-магнит|квиз|онбординг|lead|tripwire)/.test(s)) return 'Воронка';
   return 'Продукт';
 }
+function isRelevant(idea='', rationale='', section='', category='') {
+  const text = haystack(idea, rationale, section);
+  if (!idea.trim()) return false;
+  if (isLikelyEnglish(text)) return false;
+  if (REJECT_PATTERNS.some(rx => rx.test(text))) return false;
+  const hasKeywords = containsAnyKeyword(text);
+  const catOk = ['Реклама','Воронка','Продукт'].includes(category || '');
+  return hasKeywords || catOk;
+}
 
-/* ==============================
-   CSV v0/v1 парсинг
-============================== */
+/* ========= CSV v0/v1 ========= */
 function parseCsv(text) {
   const rows = [];
   let row=[], cell='', inQ=false, i=0;
@@ -170,7 +163,6 @@ function parseCsv(text) {
 }
 const norm = s => (s||'').replace(/^\uFEFF/,'').trim().toLowerCase();
 
-// v0 detector: 6 колонок, 4-я и 5-я — числа, 6-я похожа на URL
 function tryParseV0(rows) {
   for (const r of rows) if (r.length < 6) return null;
   let hits = 0;
@@ -185,18 +177,12 @@ function tryParseV0(rows) {
   const out = [];
   for (const r of rows) {
     const idea = r[2] || '';
-    if (!isRelevantIdea(idea)) continue;
+    const cat = inferCategory(idea);
     out.push({
-      Date: date,
-      Section: r[0] || '',
-      Source:  r[1] || '',
-      Category: inferCategory(idea),
-      Idea:    idea,
-      Ease:    Number(r[3] || 0),
-      Potential: Number(r[4] || 0),
-      Score:   score(Number(r[3]||0), Number(r[4]||0)).toFixed(3),
-      Link:    r[5] || '',
-      Rationale: ''
+      Date: date, Section: r[0] || '', Source: r[1] || '',
+      Category: cat, Idea: idea, Ease: Number(r[3]||0),
+      Potential: Number(r[4]||0), Score: score(Number(r[3]||0), Number(r[4]||0)).toFixed(3),
+      Link: r[5] || '', Rationale: ''
     });
   }
   return out;
@@ -208,7 +194,6 @@ function loadCsvRaw() {
   const rows = parseCsv(text);
   if (!rows.length) return [];
 
-  // v1?
   const header = rows[0].map(h => h.replace(/^\uFEFF/, ''));
   const hasHeader = ['date','section','source','idea','ease','potential','score','link','rationale']
     .some(h => header.map(norm).includes(h));
@@ -218,7 +203,6 @@ function loadCsvRaw() {
     if (parsed) return parsed;
   }
 
-  // v1 — читаем по именам колонок
   const find = name => header.findIndex(h => norm(h) === norm(name));
   const iDate=find('Date'), iSection=find('Section'), iSource=find('Source'),
         iCategory=find('Category'), iIdea=find('Idea'), iEase=find('Ease'),
@@ -244,12 +228,10 @@ function loadCsvRaw() {
   return out;
 }
 
-function loadCsvFiltered() {
-  const raw = loadCsvRaw();
-  return raw.filter(r => isRelevantIdea(r.Idea || r.idea || ''));
+function filteredView(rows) {
+  return rows.filter(r => isRelevant(r.Idea||r.idea||'', r.Rationale||r.rationale||'', r.Section||r.section||'', r.Category||r.category||''));
 }
-
-function maybePruneCsvFile(rows) {
+async function maybePruneCsvFile(rows) {
   if (!PRUNE_CSV) return;
   const csvWriter = createObjectCsvWriter({
     path: CSV_PATH,
@@ -261,21 +243,11 @@ function maybePruneCsvFile(rows) {
     ],
     append: false
   });
-  return csvWriter.writeRecords(rows);
+  await csvWriter.writeRecords(rows);
 }
+const dedupKey = r => sha(`${(r.Section||'').toLowerCase().trim()}|${(r.Idea||'').toLowerCase().trim()}`);
 
-function buildDedupSet(rows) {
-  const set = new Set();
-  for (const r of rows) {
-    const key = sha(`${(r.Section||'').toLowerCase().trim()}|${(r.Idea||'').toLowerCase().trim()}`);
-    set.add(key);
-  }
-  return set;
-}
-
-/* ==============================
-   RSS / контент
-============================== */
+/* ========= RSS fetch ========= */
 async function pickLatest(feedUrls, take = PER_SECTION) {
   const all = [];
   for (const url of feedUrls) {
@@ -309,9 +281,7 @@ async function fetchText(url) {
   } catch { return ''; }
 }
 
-/* ==============================
-   GPT
-============================== */
+/* ========= GPT ========= */
 function buildPrompt() {
   const { business_context, constraints, scoring } = CONFIG;
   return `
@@ -320,25 +290,10 @@ function buildPrompt() {
 Ограничения: без отдела разработки: ${constraints.has_no_dev_team?'да':'нет'}, бюджет теста ≤ $${constraints.max_budget_usd}, срок проверки ≤ ${constraints.max_duration_weeks} недели. Если идея НЕ применима к школе массажа — НЕ выводи её вовсе.
 Пиши ТОЛЬКО НА РУССКОМ.
 
-Категории для каждой гипотезы:
-- "Реклама" — креативы, таргет, аудитории, офферы, лендинги.
-- "Воронка" — автовебинар, цепочки писем/мессенджеров, лид-магниты, квизы, ретаргет, прогрев.
-- "Продукт" — программа/пакетирование, апсейлы/крест-сейлы, гарантии/политики, контент курса.
-
-Шкалы:
-- "Простота (ease)" (1–10): ${scoring.ease.definition}.
-- "Потенциал (potential)" (1–10): ${scoring.potential.definition}.
-
-Верни ЧИСТЫЙ JSON-массив из релевантных объектов вида:
-{
- "idea": "коротко, конкретно. Обязательно упоминай контекст школы массажа (массаж, курс, урок, школа, ученик, вебинар и т.п.)",
- "category": "Реклама" | "Воронка" | "Продукт",
- "ease": 7,
- "potential": 9,
- "rationale": "почему снизит CPL/повысит LTV/маржу именно для школы массажа"
-}`.trim();
+Категории: "Реклама", "Воронка", "Продукт".
+Верни ЧИСТЫЙ JSON-массив объектов:
+{"idea":"коротко, обязательно в контексте школы массажа","category":"Реклама|Воронка|Продукт","ease":7,"potential":9,"rationale":"почему снизит CPL/повысит LTV/маржу именно для школы массажа"}`.trim();
 }
-
 async function gptHypotheses(title, text) {
   const sys = buildPrompt();
   const resp = await openai.responses.create({
@@ -350,13 +305,11 @@ async function gptHypotheses(title, text) {
     return arr.map(x => ({
       ...x,
       category: ['Реклама','Воронка','Продукт'].includes(x.category) ? x.category : inferCategory(x.idea||'')
-    })).filter(x => isRelevantIdea(x.idea));
+    }));
   } catch { return []; }
 }
 
-/* ==============================
-   Секция, Telegram, Сайт
-============================== */
+/* ========= BUILD SECTION / TG ========= */
 async function buildSection(title, items) {
   const out = [];
   for (const it of items) {
@@ -365,14 +318,13 @@ async function buildSection(title, items) {
     for (const h of hyps) {
       if (!passThresholds(h)) continue;
       out.push({ section:title, source:it.feedTitle, link:it.link,
-                 idea:h.idea.trim(), category:h.category,
+                 idea:h.idea?.trim()||'', category:h.category,
                  ease:Number(h.ease||0), potential:Number(h.potential||0),
                  rationale:(h.rationale||'').trim() });
     }
   }
   return out;
 }
-
 const esc = s => (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 async function postToTelegram(dateStr, bySection) {
   if (!BOT_TOKEN || !CHAT_ID) return;
@@ -394,28 +346,12 @@ async function postToTelegram(dateStr, bySection) {
   } catch {}
 }
 
-function writeSiteFromAllRows(rows) {
-  const weights = CONFIG.thresholds?.score_weights || { potential:0.6, ease:0.4 };
-  const enriched = rows
-    .filter(r => isRelevantIdea(r.Idea || r.idea || ''))
-    .map(r=>{
-      const ease = Number(r.Ease ?? r.ease ?? 0);
-      const potential = Number(r.Potential ?? r.potential ?? 0);
-      const sc = Number(r.Score ?? score(ease, potential, weights));
-      return {
-        date: r.Date || r.date || '',
-        section: r.Section || r.section || '',
-        source: r.Source || r.source || '',
-        category: r.Category || r.category || inferCategory(r.Idea||''),
-        idea: r.Idea || r.idea || '',
-        ease, potential, score: sc,
-        rationale: r.Rationale || r.rationale || '',
-        link: r.Link || r.link || ''
-      };
-    });
+/* ========= SITE ========= */
+function writeSite(allRowsFiltered, allRowsRaw) {
+  fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses.json'), JSON.stringify(allRowsFiltered, null, 2));
+  fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses_all.json'), JSON.stringify(allRowsRaw, null, 2));
 
-  fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses.json'), JSON.stringify(enriched, null, 2));
-
+  const w = CONFIG.thresholds?.score_weights || { potential:0.6, ease:0.4 };
   const html = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Гипотезы — приоритеты</title>
@@ -433,8 +369,10 @@ button.active{background:#efefef}
 </style>
 </head><body>
 <h1>Топ гипотез (по score)</h1>
-<p><small>Score = ${weights.potential}×Potential + ${weights.ease}×Ease. В таблицу попадают только релевантные гипотезы для школы массажа.</small></p>
+<p><small>Score = ${w.potential}×Potential + ${w.ease}×Ease. В таблице можно переключать: только релевантные для школы массажа / все записи.</small></p>
 <div class="controls">
+  <button id="viewRel" class="active">Релевантные</button>
+  <button id="viewAll">Все</button>
   <button data-filter="all" class="active">Все</button>
   <button data-filter="Реклама">Реклама</button>
   <button data-filter="Воронка">Воронка</button>
@@ -453,12 +391,24 @@ button.active{background:#efefef}
 <th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
 <script>
-let data=[],key='score',dir=-1,filter='all';
-async function load(){ const r=await fetch('hypotheses.json?ts='+Date.now()); data=await r.json(); render(); }
+let data=[], all=[], key='score', dir=-1, filter='all', useAll=false;
+
+async function load(){
+  const [r1,r2] = await Promise.all([
+    fetch('hypotheses.json?ts='+Date.now()),
+    fetch('hypotheses_all.json?ts='+Date.now())
+  ]);
+  data = await r1.json();
+  all  = await r2.json();
+  render();
+}
+
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
+
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
-  const rows=[...data].filter(x=> filter==='all'?true:(x.category===filter)).sort(sortFn);
+  const src = useAll ? all : data;
+  const rows=[...src].filter(x=> filter==='all'?true:(x.category===filter)).sort(sortFn);
   for(const x of rows){
     const tr=document.createElement('tr');
     tr.innerHTML=\`<td>\${x.date||''}</td><td>\${x.section||''}</td><td>\${x.source||''}</td>
@@ -469,27 +419,34 @@ function render(){
     tb.appendChild(tr);
   }
 }
+
 document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
-document.querySelectorAll('.controls button').forEach(b=>{
-  b.onclick=()=>{ document.querySelectorAll('.controls button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
+document.querySelectorAll('.controls button[data-filter]').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('.controls button[data-filter]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
 });
+document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
+document.getElementById('viewAll').onclick=()=>{ useAll=true;  document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
+
 load();
 </script>
 </body></html>`;
   fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), html);
 }
 
-/* ==============================
-   MAIN
-============================== */
+/* ========= MAIN ========= */
 async function main(){
   const dateStr = todayRu();
 
-  // 1) читаем CSV (уже отфильтрованное представление)
-  const existing = loadCsvFiltered();
-  const dedup = new Set(existing.map(r => sha(`${(r.Section||'').toLowerCase().trim()}|${(r.Idea||'').toLowerCase().trim()}`)));
+  // 1) читаем CSV
+  const allRaw = loadCsvRaw();
 
-  // 2) RSS → GPT → новые гипотезы
+  // 2) фильтрованная «чистая» витрина
+  const clean = filteredView(allRaw);
+
+  // 3) dedup по витрине
+  const dedup = new Set(clean.map(dedupKey));
+
+  // 4) RSS → GPT
   const [salesRaw, edtechRaw, massageRaw] = await Promise.all([
     pickLatest(FEEDS.sales), pickLatest(FEEDS.edtech), pickLatest(FEEDS.massage)
   ]);
@@ -497,41 +454,23 @@ async function main(){
   const edtech  = await buildSection('📚 EdTech', edtechRaw);
   const massage = await buildSection('💆‍♂️ Массаж', massageRaw);
 
-  // 3) анти-дубли
-  const newCandidates = [...sales, ...edtech, ...massage];
-  const reallyNew = [];
-  for (const h of newCandidates) {
-    const key = sha(`${h.section.toLowerCase().trim()}|${h.idea.toLowerCase().trim()}`);
+  // 5) анти-дубли, мягкая релевантность
+  const weights = CONFIG.thresholds?.score_weights || { potential:0.6, ease:0.4 };
+  const toAppend = [];
+  for (const h of [...sales, ...edtech, ...massage]) {
+    const row = {
+      Date: dateStr, Section: h.section, Source: h.source,
+      Category: h.category, Idea: h.idea, Ease: h.ease, Potential: h.potential,
+      Score: score(h.ease, h.potential, weights).toFixed(3), Link: h.link, Rationale: h.rationale || ''
+    };
+    const key = dedupKey(row);
     if (dedup.has(key)) continue;
     dedup.add(key);
-    if (!isRelevantIdea(h.idea)) continue;
-    if (!passThresholds(h)) continue;
-    reallyNew.push(h);
+    toAppend.push(row);
   }
 
-  // 4) Telegram
-  const grouped = new Map([
-    ['🚀 Продажи и маркетинг', reallyNew.filter(x=>x.section==='🚀 Продажи и маркетинг')],
-    ['📚 EdTech',              reallyNew.filter(x=>x.section==='📚 EdTech')],
-    ['💆‍♂️ Массаж',           reallyNew.filter(x=>x.section==='💆‍♂️ Массаж')],
-  ]);
-  await postToTelegram(dateStr, grouped);
-
-  // 5) дозапись в CSV (только чистые строки)
-  if (reallyNew.length) {
-    const weights = CONFIG.thresholds?.score_weights || { potential:0.6, ease:0.4 };
-    const toAppend = reallyNew.map(x => ({
-      Date: dateStr,
-      Section: x.section,
-      Source: x.source,
-      Category: x.category,
-      Idea: x.idea,
-      Ease: x.ease,
-      Potential: x.potential,
-      Score: score(x.ease, x.potential, weights).toFixed(3),
-      Link: x.link,
-      Rationale: x.rationale || ''
-    }));
+  // 6) дозаписываем
+  if (toAppend.length) {
     const csvWriter = createObjectCsvWriter({
       path: CSV_PATH,
       header: [
@@ -545,16 +484,34 @@ async function main(){
     await csvWriter.writeRecords(toAppend);
   }
 
-  // 6) возможно перезапишем CSV чистой версией (по флагу)
-  if (PRUNE_CSV) {
-    await maybePruneCsvFile(loadCsvFiltered());
-  }
+  // 7) перечитываем CSV (raw + clean), при необходимости — «подчищаем» файл
+  const rawNow   = loadCsvRaw();
+  const cleanNow = filteredView(rawNow);
+  if (PRUNE_CSV) await maybePruneCsvFile(cleanNow);
 
-  // 7) сайт
-  const allRows = loadCsvFiltered();
-  writeSiteFromAllRows(allRows);
+  // 8) телеграм — только чистые
+  const grouped = new Map([
+    ['🚀 Продажи и маркетинг', cleanNow.filter(x=>x.Section==='🚀 Продажи и маркетинг')],
+    ['📚 EdTech',              cleanNow.filter(x=>x.Section==='📚 EdTech')],
+    ['💆‍♂️ Массаж',           cleanNow.filter(x=>x.Section==='💆‍♂️ Массаж')],
+  ]);
+  await postToTelegram(dateStr, grouped);
 
-  console.log(`Done. New clean hypotheses saved: ${reallyNew.length}. CSV total (clean view): ${allRows.length}.`);
+  // 9) сайт — две витрины
+  writeSite(
+    cleanNow.map(r=>({
+      date:r.Date, section:r.Section, source:r.Source, category:r.Category,
+      idea:r.Idea, ease:Number(r.Ease||0), potential:Number(r.Potential||0),
+      score:Number(r.Score||0), rationale:r.Rationale||'', link:r.Link||''
+    })),
+    rawNow.map(r=>({
+      date:r.Date, section:r.Section, source:r.Source, category:r.Category,
+      idea:r.Idea, ease:Number(r.Ease||0), potential:Number(r.Potential||0),
+      score:Number(r.Score||0), rationale:r.Rationale||'', link:r.Link||''
+    }))
+  );
+
+  console.log(`Done. Appended: ${toAppend.length}. Clean view: ${cleanNow.length}. Raw total: ${rawNow.length}.`);
 }
 
 main();
