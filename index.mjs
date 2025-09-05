@@ -131,13 +131,11 @@ function inferCategory(idea='') {
   return 'Продукт';
 }
 function isRelevant(idea='', rationale='', section='', category='') {
-  const text = haystack(idea, rationale, section);
+  const text = [idea, rationale, section].join(' ');
   if (!idea.trim()) return false;
-  if (isLikelyEnglish(text)) return false;
-  if (REJECT_PATTERNS.some(rx => rx.test(text))) return false;
-  const hasKeywords = containsAnyKeyword(text);
-  const catOk = ['Реклама','Воронка','Продукт'].includes(category || '');
-  return hasKeywords || catOk;
+  if (isLikelyEnglish(text)) return false;                 // явный английский – вон
+  if (REJECT_PATTERNS.some(rx => rx.test(text))) return false; // SaaS/K8s и т.п. – вон
+  return true; // остальное оставляем
 }
 
 /* ========= CSV v0/v1 ========= */
@@ -348,7 +346,8 @@ async function postToTelegram(dateStr, bySection) {
 
 /* ========= SITE ========= */
 function writeSite(allRowsFiltered, allRowsRaw) {
-  fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses.json'), JSON.stringify(allRowsFiltered, null, 2));
+  const fsPath = path.join(DOCS_DIR, 'hypotheses.json');
+  fs.writeFileSync(fsPath, JSON.stringify(allRowsFiltered, null, 2));
   fs.writeFileSync(path.join(DOCS_DIR, 'hypotheses_all.json'), JSON.stringify(allRowsRaw, null, 2));
 
   const w = CONFIG.thresholds?.score_weights || { potential:0.6, ease:0.4 };
@@ -369,11 +368,11 @@ button.active{background:#efefef}
 </style>
 </head><body>
 <h1>Топ гипотез (по score)</h1>
-<p><small>Score = ${w.potential}×Potential + ${w.ease}×Ease. В таблице можно переключать: только релевантные для школы массажа / все записи.</small></p>
+<p><small>Score = ${w.potential}×Potential + ${w.ease}×Ease. Можно показать «Релевантные» (фильтр) или «Все».</small></p>
 <div class="controls">
   <button id="viewRel" class="active">Релевантные</button>
   <button id="viewAll">Все</button>
-  <button data-filter="all" class="active">Все</button>
+  <button data-filter="all" class="active">Все категории</button>
   <button data-filter="Реклама">Реклама</button>
   <button data-filter="Воронка">Воронка</button>
   <button data-filter="Продукт">Продукт</button>
@@ -400,11 +399,16 @@ async function load(){
   ]);
   data = await r1.json();
   all  = await r2.json();
+
+  // если чистая витрина пустая — сразу показываем «Все»
+  if (!Array.isArray(data) || data.length===0) {
+    useAll = true;
+    document.getElementById('viewAll').classList.add('active');
+    document.getElementById('viewRel').classList.remove('active');
+  }
   render();
 }
-
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
-
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
   const src = useAll ? all : data;
@@ -419,14 +423,12 @@ function render(){
     tb.appendChild(tr);
   }
 }
-
 document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
 document.querySelectorAll('.controls button[data-filter]').forEach(b=>{
   b.onclick=()=>{ document.querySelectorAll('.controls button[data-filter]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
 });
 document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
 document.getElementById('viewAll').onclick=()=>{ useAll=true;  document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
-
 load();
 </script>
 </body></html>`;
