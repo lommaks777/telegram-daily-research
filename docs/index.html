@@ -15,8 +15,10 @@ button.active{background:#efefef}
 </style>
 </head><body>
 <h1>Топ гипотез (по score)</h1>
-<p><small>Score = 0.6×Potential + 0.4×Ease. В таблицу попадают только релевантные гипотезы для школы массажа.</small></p>
+<p><small>Score = 0.6×Potential + 0.4×Ease. В таблице можно переключать: только релевантные для школы массажа / все записи.</small></p>
 <div class="controls">
+  <button id="viewRel" class="active">Релевантные</button>
+  <button id="viewAll">Все</button>
   <button data-filter="all" class="active">Все</button>
   <button data-filter="Реклама">Реклама</button>
   <button data-filter="Воронка">Воронка</button>
@@ -35,12 +37,24 @@ button.active{background:#efefef}
 <th data-k="link">Ссылка</th>
 </tr></thead><tbody></tbody></table>
 <script>
-let data=[],key='score',dir=-1,filter='all';
-async function load(){ const r=await fetch('hypotheses.json?ts='+Date.now()); data=await r.json(); render(); }
+let data=[], all=[], key='score', dir=-1, filter='all', useAll=false;
+
+async function load(){
+  const [r1,r2] = await Promise.all([
+    fetch('hypotheses.json?ts='+Date.now()),
+    fetch('hypotheses_all.json?ts='+Date.now())
+  ]);
+  data = await r1.json();
+  all  = await r2.json();
+  render();
+}
+
 function sortFn(a,b){ if(a[key]===b[key]) return 0; return (a[key]>b[key]?1:-1)*dir; }
+
 function render(){
   const tb=document.querySelector('tbody'); tb.innerHTML='';
-  const rows=[...data].filter(x=> filter==='all'?true:(x.category===filter)).sort(sortFn);
+  const src = useAll ? all : data;
+  const rows=[...src].filter(x=> filter==='all'?true:(x.category===filter)).sort(sortFn);
   for(const x of rows){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${x.date||''}</td><td>${x.section||''}</td><td>${x.source||''}</td>
@@ -51,10 +65,14 @@ function render(){
     tb.appendChild(tr);
   }
 }
+
 document.querySelectorAll('th').forEach(th=> th.onclick=()=>{ key=th.dataset.k; dir*=-1; render(); });
-document.querySelectorAll('.controls button').forEach(b=>{
-  b.onclick=()=>{ document.querySelectorAll('.controls button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
+document.querySelectorAll('.controls button[data-filter]').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('.controls button[data-filter]').forEach(x=>x.classList.remove('active')); b.classList.add('active'); filter=b.dataset.filter; render(); };
 });
+document.getElementById('viewRel').onclick=()=>{ useAll=false; document.getElementById('viewRel').classList.add('active'); document.getElementById('viewAll').classList.remove('active'); render(); };
+document.getElementById('viewAll').onclick=()=>{ useAll=true;  document.getElementById('viewAll').classList.add('active'); document.getElementById('viewRel').classList.remove('active'); render(); };
+
 load();
 </script>
 </body></html>
